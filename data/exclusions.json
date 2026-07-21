@@ -1,0 +1,461 @@
+{
+  "HYUNDAI": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months"
+      },
+      {
+        "component": "Clutch",
+        "factory": "24 months"
+      }
+    ]
+  },
+  "CHERY": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 30,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "24 months / 60,000km"
+      },
+      {
+        "component": "Hub Bearings",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "3 months / 5,000km"
+      }
+    ]
+  },
+  "FOTON": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Clutch",
+        "factory": "24 months / 60,000km"
+      },
+      {
+        "component": "Battery",
+        "factory": "12 months / 10,000km"
+      }
+    ]
+  },
+  "JAC": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "12V Battery",
+        "factory": "12 months"
+      },
+      {
+        "component": "Suspension",
+        "factory": "No Warranty"
+      },
+      {
+        "component": "Clutch",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Management System",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Steering Mechanism",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Drive Shafts / CV Joints",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "60 months / 100,000km"
+      }
+    ]
+  },
+  "MAHINDRA": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Suspension",
+        "factory": "24 months / 50,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Battery",
+        "factory": "12 months / 1,000km"
+      }
+    ]
+  },
+  "MG": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Clutch",
+        "factory": "6 months / 10,000km"
+      },
+      {
+        "component": "Battery",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Exhaust (incl. Catalytic Converter)",
+        "factory": "24 months / 30,000km"
+      },
+      {
+        "component": "Suspension",
+        "factory": "24 months / 30,000km"
+      },
+      {
+        "component": "Drive Shafts / CV Joints",
+        "factory": "24 months / 30,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "24 months / 30,000km"
+      }
+    ]
+  },
+  "SUZUKI": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months"
+      },
+      {
+        "component": "Clutch",
+        "factory": "40,000km"
+      },
+      {
+        "component": "Suspension",
+        "factory": "6 months"
+      },
+      {
+        "component": "Management System",
+        "factory": "12 months"
+      },
+      {
+        "component": "Steering Mechanism",
+        "factory": "Partial Warranty Only"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "No Warranty"
+      },
+      {
+        "component": "Viscous & Electric Fans",
+        "factory": "No Warranty"
+      }
+    ]
+  },
+  "TATA": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Suspension",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Ball Joints",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Management System",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "12 months / 20,000km"
+      }
+    ]
+  },
+  "GWM": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Exhaust & Catalytic Converter",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Management System",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Suspension",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Steering Mechanism",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Drive Shafts / CV Joints",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Viscous & Electric Fans",
+        "factory": "60 months / 100,000km"
+      }
+    ]
+  },
+  "HAVAL": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Exhaust & Catalytic Converter",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Management System",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Suspension",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Steering Mechanism",
+        "factory": "60 months / 100,000km"
+      },
+      {
+        "component": "Drive Shafts / CV Joints",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Viscous & Electric Fans",
+        "factory": "60 months / 100,000km"
+      }
+    ]
+  },
+  "NISSAN": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Clutch",
+        "factory": "36 months"
+      },
+      {
+        "component": "Battery",
+        "factory": "12 months"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "36 months"
+      }
+    ]
+  },
+  "OMODA": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 30,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "24 months / 60,000km"
+      },
+      {
+        "component": "Hub Bearings",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "3 months / 5,000km"
+      }
+    ]
+  },
+  "JAECOO": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 30,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "24 months / 60,000km"
+      },
+      {
+        "component": "Hub Bearings",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "3 months / 5,000km"
+      }
+    ]
+  },
+  "CHANGAN": {
+    "status": "pending",
+    "items": []
+  },
+  "BAIC": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Clutch",
+        "factory": "6 months / 5,000km"
+      },
+      {
+        "component": "Battery",
+        "factory": "12 months"
+      }
+    ]
+  },
+  "GAC MOTOR": {
+    "status": "pending",
+    "items": []
+  },
+  "JETOUR": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 30,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "24 months / 60,000km"
+      },
+      {
+        "component": "Hub Bearings",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "3 months / 5,000km"
+      }
+    ]
+  },
+  "LEPAS": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "12 months / 30,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "24 months / 60,000km"
+      },
+      {
+        "component": "Hub Bearings",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "3 months / 5,000km"
+      }
+    ]
+  },
+  "RENAULT": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "Battery",
+        "factory": "24 months"
+      },
+      {
+        "component": "Clutch",
+        "factory": "36 months / 100,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "36 months / 100,000km"
+      }
+    ]
+  },
+  "BYD": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "12V Battery",
+        "factory": "12 months / 20,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "3 years / 60,000km"
+      },
+      {
+        "component": "Suspension",
+        "factory": "3 years / 60,000km"
+      },
+      {
+        "component": "Drive Shafts / CV Joints",
+        "factory": "3 years / 60,000km"
+      }
+    ]
+  },
+  "GEELY": {
+    "status": "confirmed",
+    "items": [
+      {
+        "component": "12V Battery",
+        "factory": "12 months"
+      },
+      {
+        "component": "Suspension",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Wheel Bearings",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Clutch",
+        "factory": "36 months / 60,000km"
+      },
+      {
+        "component": "Exhaust System / Catalytic Converter",
+        "factory": "36 months / 60,000km"
+      }
+    ]
+  }
+}
