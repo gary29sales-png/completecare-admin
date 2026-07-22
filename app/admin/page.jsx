@@ -72,6 +72,42 @@ export default function AdminPage() {
     loadState();
   }
 
+  async function handleDiscardVehicle(brand, adg) {
+    if (!confirm('Discard this vehicle? It will not be suggested again on future uploads unless you restore it from the ignored list.')) {
+      return;
+    }
+    await fetch('/api/admin/pending', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand, adg }),
+    });
+    if (selectedVehicle?.adg === adg) setSelectedVehicle(null);
+    loadState();
+  }
+
+  async function handleClearBrand(brand, count) {
+    if (!confirm(`Discard all ${count} pending vehicle(s) for ${brand}? None will be suggested again unless restored from the ignored list.`)) {
+      return;
+    }
+    await fetch('/api/admin/pending', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand, clearAll: true }),
+    });
+    setSelectedBrand(null);
+    setSelectedVehicle(null);
+    loadState();
+  }
+
+  async function handleUnignore(adg) {
+    await fetch('/api/admin/pending', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unignoreAdg: adg }),
+    });
+    loadState();
+  }
+
   if (!authed) {
     return (
       <div style={styles.page}>
@@ -135,22 +171,60 @@ export default function AdminPage() {
         </div>
 
         {selectedBrand && (
-          <div style={styles.vehicleList}>
-            {state.pending[selectedBrand].map((v) => (
+          <div>
+            <div style={styles.brandActionRow}>
               <button
-                key={v.adg}
-                style={{
-                  ...styles.vehicleButton,
-                  ...(selectedVehicle?.adg === v.adg ? styles.vehicleButtonActive : {}),
-                }}
-                onClick={() => setSelectedVehicle(v)}
+                style={styles.discardAllButton}
+                onClick={() => handleClearBrand(selectedBrand, state.pending[selectedBrand].length)}
               >
-                {v.desc || v.adg} — ADG {v.adg}
+                Discard all {state.pending[selectedBrand].length} pending for {selectedBrand}
               </button>
-            ))}
+            </div>
+            <div style={styles.vehicleList}>
+              {state.pending[selectedBrand].map((v) => (
+                <div key={v.adg} style={styles.vehicleRow}>
+                  <button
+                    style={{
+                      ...styles.vehicleButton,
+                      ...(selectedVehicle?.adg === v.adg ? styles.vehicleButtonActive : {}),
+                    }}
+                    onClick={() => setSelectedVehicle(v)}
+                  >
+                    {v.desc || v.adg} — ADG {v.adg}
+                  </button>
+                  <button
+                    style={styles.discardButton}
+                    title="Discard — won't be suggested again"
+                    onClick={() => handleDiscardVehicle(selectedBrand, v.adg)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
+
+      {(state.ignored_adgs || []).length > 0 && (
+        <section style={styles.card}>
+          <h2 style={styles.h2}>Ignored vehicles ({state.ignored_adgs.length})</h2>
+          <p style={styles.meta}>
+            Discarded ADGs — these won't be suggested again on future uploads. Restore one if it
+            was discarded by mistake; it'll reappear next time you upload a sheet containing it.
+          </p>
+          <div style={styles.vehicleList}>
+            {state.ignored_adgs.map((adg) => (
+              <div key={adg} style={styles.vehicleRow}>
+                <span style={styles.ignoredAdg}>ADG {adg}</span>
+                <button style={styles.restoreButton} onClick={() => handleUnignore(adg)}>
+                  Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {selectedVehicle && (
         <VehicleEditor
@@ -364,8 +438,14 @@ const styles = {
   brandButton: { padding: '8px 14px', border: '1px solid #d9e4f0', borderRadius: 6, background: '#f4f7fb', cursor: 'pointer', fontSize: 13 },
   brandButtonActive: { background: '#0a2e5c', color: '#fff' },
   vehicleList: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 },
-  vehicleButton: { textAlign: 'left', padding: '8px 12px', border: '1px solid #eee', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 },
+  vehicleRow: { display: 'flex', alignItems: 'center', gap: 8 },
+  vehicleButton: { flex: 1, textAlign: 'left', padding: '8px 12px', border: '1px solid #eee', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 },
   vehicleButtonActive: { borderColor: '#0a2e5c', background: '#e8f0fe' },
+  discardButton: { padding: '6px 10px', border: '1px solid #f0d0d2', borderRadius: 6, background: '#fff5f5', color: '#d64045', cursor: 'pointer', fontSize: 13 },
+  brandActionRow: { marginTop: 12, marginBottom: 4 },
+  discardAllButton: { padding: '6px 12px', border: '1px solid #f0d0d2', borderRadius: 6, background: '#fff5f5', color: '#d64045', cursor: 'pointer', fontSize: 12 },
+  ignoredAdg: { flex: 1, fontSize: 13, color: '#6b7c93' },
+  restoreButton: { padding: '6px 12px', border: '1px solid #d9e4f0', borderRadius: 6, background: '#f4f7fb', cursor: 'pointer', fontSize: 12 },
   meta: { fontSize: 13, color: '#6b7c93', marginBottom: 12 },
   modeRow: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 },
   radioLabel: { fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 },

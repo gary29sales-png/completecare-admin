@@ -127,6 +127,11 @@ export async function POST(req) {
       if (v.adg) existingAdgs.add(normalizeAdg(v.adg));
     }
   }
+  // Also exclude ADGs the admin deliberately discarded — they should
+  // never resurface just because they're still in the weekly sheet.
+  for (const adg of draft.ignored_adgs || []) {
+    existingAdgs.add(normalizeAdg(adg));
+  }
 
   const newlyFound = [];
   for (let r = 1; r < rows.length; r++) {
