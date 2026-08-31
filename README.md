@@ -1,86 +1,92 @@
 # Complete Care Admin
 
-Backend for the Complete Care Compatibility Guide. Replaces the "edit the HTML
-by hand" workflow with: upload the weekly Excel → admin flags new ADGs →
-you categorize them → publish → both BM tools pick it up automatically.
+Production-ready admin/API backend for the Complete Care Compatibility Guide.
+The separately deployed guide reads the published vehicle dataset from this
+service; the guide HTML is not modified here.
 
-## What this is
+## Endpoints
 
-- **`/api/vehicles`** — public read-only endpoint. This is what the Traficc
-  and Avis BM tools should fetch on load instead of embedding `FALLBACK_DATA`
-  directly in the HTML. (Wiring the HTML tools to fetch from here instead of
-  their embedded blob is the next piece of work — this repo is the backend
-  half.)
-- **`/admin`** — password-gated admin UI: upload sheet, review pending
-  vehicles, categorize them, publish.
-- **Staged publishing** — uploads and categorization edit a *draft*. Nothing
-  reaches the live BM tools until you click Publish.
+- **`GET /api/vehicles`** - public, read-only six-key contract:
+  `vehicles`, `exclusions`, `no_clutch_vehicles`,
+  `adg_exclusion_overrides`, `confirmed_brands`, and `oem_only_brands`.
+  Duplicate vehicle rows and string ADGs (including leading zeros) are
+  preserved. The response has exact-origin CORS, ETag support, and a short
+  cache lifetime.
+- **`OPTIONS /api/vehicles`** - exact-origin CORS preflight.
+- **`/admin`** - internal password-gated workflow for upload, categorization,
+  and publish.
+- **`GET /healthz`** - readiness/health check. `/readyz` and
+  `/api/healthz` are equivalent aliases.
 
-## Data model
+## Data and publishing
 
-Seeded once from the current Traficc HTML tool (`data/*.json`), then lives
-in Redis (Vercel/Upstash) once deployed:
+The six JSON files under `data/` are the trusted seed snapshot extracted from
+the latest Complete Care HTML. They seed `cc:published` once in an empty
+store. The Supabase `kv_store` table then holds:
 
-- `vehicles` — brand → array of vehicle objects (adg, desc, warranty, etc.)
-- `exclusions` — brand → `{ status, items: [{ component, factory }] }`.
-  One shared component/drop-off table per brand.
-- `no_clutch_vehicles` — array of vehicle `desc` strings that suppress the
-  clutch exclusion row (DHT/CVT/automatic).
-- `adg_exclusion_overrides` — ADG → override drop-off period string, for
-  individual vehicles that are exceptions to their brand's standard table.
-- `confirmed_brands` / `oem_only_brands` — brand status lists.
+- `cc:published` - the live six-key public contract.
+- `cc:draft` - the live data plus pending and ignored admin queue state.
+
+Uploading and categorizing only changes the draft. Clicking **Publish** is the
+only operation that updates the public dataset.
 
 ## Local development
 
+Node 22 is required by the lockfile and is pinned by `package.json` and the
+container image.
+
+```powershell
+npm ci
+Copy-Item .env.example .env.local
+# Set NODE_ENV=development, ADMIN_PASSWORD, and ADMIN_SESSION_SECRET.
+npm run dev
 ```
-npm install
-ADMIN_PASSWORD=whatever npm run dev
+
+When `NODE_ENV` is not `production` and both Supabase variables are omitted,
+the app uses local JSON state files under `.local-data/` and the checked-in
+seed files under `data/`. This fallback is intentionally
+unavailable in production. To refresh the checked-in seed from a trusted HTML
+snapshot:
+
+```powershell
+node scripts/extract-from-html.js C:\path\CompleteCare_BM_Tool.html
 ```
 
-Without Redis env vars set, data is stored as local JSON files under `/data`
-(fine for local testing, not for production — a serverless deploy has no
-persistent disk).
+## Production deployment
 
-## Deploying to Vercel
+Apply `supabase/migrations/20260831120000_create_kv_store.sql`, then provide
+the variables in `.env.example` through the deployment secret manager. At
+minimum production requires `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, and
+`ADMIN_ORIGIN`. Set `PUBLIC_ALLOWED_ORIGINS` to comma-separated exact origins
+for the separately hosted guide; do not use `*`.
 
-1. Push this repo to GitHub, import it into a new Vercel project.
-2. Add a Redis store: Vercel dashboard → Storage → add the **Upstash for
-   Redis** integration (or any Redis you like) to this project. That sets
-   `KV_REST_API_URL` / `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` /
-   `UPSTASH_REDIS_REST_TOKEN` — either naming works, see `lib/store.js`)
-   automatically.
-3. Add an environment variable `ADMIN_PASSWORD` — whatever you want to log
-   into `/admin` with.
-4. Deploy. First hit to `/api/vehicles` or `/admin` seeds Redis from the
-   `data/*.json` files baked into the deployment.
+The guide points at this service with `COMPLETECARE_API_URL` (or its
+`COMPLETECARE_DATA_ENDPOINT` alias), configured as the admin base URL or the
+complete `/api/vehicles` URL. CORS is configured here with the guide's browser
+origin, not with that API URL.
+
+The internal deployment is container-first:
+
+```powershell
+docker build -t completecare-admin:latest .
+docker run --rm -p 3000:3000 --env-file .env completecare-admin:latest
+```
+
+TLS should terminate at the internal reverse proxy. Forward the external
+`Host`, `Origin`, and `X-Forwarded-Proto` headers, set `TRUST_PROXY=true` only
+for a trusted proxy, and keep the service-role key in the platform secret
+store. The container health check uses `/healthz`.
+
+See [docs/deployment.md](docs/deployment.md) for the Supabase contract,
+reverse-proxy requirements, security controls, limits, and operational
+runbook.
 
 ## Weekly workflow
 
-1. Go to `/admin`, log in.
-2. Upload the Monday Excel sheet. It scans for ADG codes not already in the
-   dataset (published or already-pending) and buckets new ones by brand.
-3. Click a brand, click a vehicle, categorize it:
-   - **Standard** (brand already confirmed): just adds the vehicle as-is.
-   - **Build exclusion table** (new/unconfirmed brand, or you're
-     deliberately reworking a brand's table): tick the applicable
-     components from the fixed list, enter drop-off months/km for each.
-   - **ADG override**: for a vehicle that's an exception to its brand's
-     usual drop-off period — enter the override period for this ADG only.
-   - Tick "DHT / CVT / automatic" if the clutch row should be suppressed
-     for this vehicle.
-4. Repeat for each pending vehicle.
-5. Click **Publish**. This is the only step that affects what BMs see.
-
-## Known gaps / next steps
-
-- The Traficc and Avis HTML tools still need to be changed to `fetch('/api/vehicles')`
-  instead of embedding `FALLBACK_DATA` — that's the piece that actually
-  retires manual HTML editing.
-- Excel column-name matching (`app/api/admin/upload/route.js`,
-  `HEADER_ALIASES`) was built from your description of the sheet, not a
-  real sample. Send a real weekly export and I'll tighten it up.
-- No audit trail yet on who categorized what — fine for a single admin user,
-  worth adding if anyone else gets access.
-- `scripts/extract-from-html.js` lets you re-seed `/data` from a fresh copy
-  of the HTML tool if you ever need to reset the admin dataset to match it
-  exactly.
+1. Log in at `/admin`.
+2. Upload the weekly `.xlsx` or `.xls` sheet. The bounded parser checks the
+   header and rows and queues ADGs not already published, pending, or ignored.
+3. Categorize each pending vehicle as standard, a brand exclusion table, an
+   ADG override, and/or no-clutch.
+4. Click **Publish** when the draft is ready.

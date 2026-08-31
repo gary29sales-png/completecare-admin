@@ -2,6 +2,25 @@
 
 import { useEffect, useState } from 'react';
 
+function getCsrfToken() {
+  if (typeof document === 'undefined') return '';
+  const match = document.cookie.match(/(?:^|;\s*)cc_admin_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+async function adminFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (options.method && options.method !== 'GET') {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+  }
+  return fetch(url, { ...options, headers });
+}
+
+async function responseBody(response) {
+  return response.json().catch(() => ({}));
+}
+
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [password, setPassword] = useState('');
@@ -11,16 +30,34 @@ export default function AdminPage() {
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [uploadMsg, setUploadMsg] = useState('');
   const [publishMsg, setPublishMsg] = useState('');
+  const [adminError, setAdminError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   async function loadState() {
-    const res = await fetch('/api/admin/state');
-    if (res.status === 401) {
+    try {
+      const res = await fetch('/api/admin/state');
+      const data = await responseBody(res);
+      if (res.status === 401) {
+        setAuthed(false);
+        setState(null);
+        return;
+      }
+      if (!res.ok) {
+        setAuthed(false);
+        setState(null);
+        setAdminError(data.error || 'Unable to load admin state.');
+        return;
+      }
+      setAdminError('');
+      setState(data);
+      setAuthed(true);
+    } catch {
       setAuthed(false);
-      return;
+      setState(null);
+      setAdminError('Unable to reach the admin API.');
+    } finally {
+      setLoading(false);
     }
-    const data = await res.json();
-    setState(data);
-    setAuthed(true);
   }
 
   useEffect(() => {
@@ -30,17 +67,22 @@ export default function AdminPage() {
   async function handleLogin(e) {
     e.preventDefault();
     setLoginError('');
-    const res = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setLoginError(body.error || 'Login failed.');
-      return;
+    try {
+      const res = await adminFetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const body = await responseBody(res);
+      if (!res.ok) {
+        setLoginError(body.error || 'Login failed.');
+        return;
+      }
+      setPassword('');
+      await loadState();
+    } catch {
+      setLoginError('Unable to reach the admin API.');
     }
-    loadState();
   }
 
   async function handleUpload(e) {
@@ -50,63 +92,142 @@ export default function AdminPage() {
     setUploadMsg('Uploading and scanning...');
     const form = new FormData();
     form.append('file', file);
-    const res = await fetch('/api/admin/upload', { method: 'POST', body: form });
-    const body = await res.json();
-    if (!res.ok) {
-      setUploadMsg('Error: ' + body.error);
-      return;
+    try {
+      const res = await adminFetch('/api/admin/upload', { method: 'POST', body: form });
+      const body = await responseBody(res);
+      if (!res.ok) {
+        setUploadMsg('Error: ' + (body.error || 'Upload failed.'));
+        if (res.status === 401) {
+          setAuthed(false);
+          setState(null);
+        }
+        return;
+      }
+      setUploadMsg(`Found ${body.newCount} new vehicle(s) not currently in the tool.`);
+      await loadState();
+    } catch {
+      setUploadMsg('Error: Unable to reach the admin API.');
     }
-    setUploadMsg(`Found ${body.newCount} new vehicle(s) not currently in the tool.`);
-    loadState();
   }
 
   async function handlePublish() {
     setPublishMsg('Publishing...');
-    const res = await fetch('/api/admin/publish', { method: 'POST' });
-    const body = await res.json();
-    if (!res.ok) {
-      setPublishMsg('Error: ' + body.error);
-      return;
+    try {
+      const res = await adminFetch('/api/admin/publish', { method: 'POST' });
+      const body = await responseBody(res);
+      if (!res.ok) {
+        setPublishMsg('Error: ' + (body.error || 'Publish failed.'));
+        if (res.status === 401) {
+          setAuthed(false);
+          setState(null);
+        }
+        return;
+      }
+      setPublishMsg('Published. The live BM tools will pick this up on next load.');
+      await loadState();
+    } catch {
+      setPublishMsg('Error: Unable to reach the admin API.');
     }
-    setPublishMsg('Published. The live BM tools will pick this up on next load.');
-    loadState();
   }
 
   async function handleDiscardVehicle(brand, adg) {
     if (!confirm('Discard this vehicle? It will not be suggested again on future uploads unless you restore it from the ignored list.')) {
       return;
     }
-    await fetch('/api/admin/pending', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brand, adg }),
-    });
-    if (selectedVehicle?.adg === adg) setSelectedVehicle(null);
-    loadState();
+    try {
+      const res = await adminFetch('/api/admin/pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, adg }),
+      });
+      const body = await responseBody(res);
+      if (!res.ok) {
+        setAdminError(body.error || 'Unable to discard vehicle.');
+        if (res.status === 401) {
+          setAuthed(false);
+          setState(null);
+        }
+        return;
+      }
+      setAdminError('');
+      if (selectedVehicle?.adg === adg) setSelectedVehicle(null);
+      await loadState();
+    } catch {
+      setAdminError('Unable to reach the admin API.');
+    }
   }
 
   async function handleClearBrand(brand, count) {
     if (!confirm(`Discard all ${count} pending vehicle(s) for ${brand}? None will be suggested again unless restored from the ignored list.`)) {
       return;
     }
-    await fetch('/api/admin/pending', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brand, clearAll: true }),
-    });
-    setSelectedBrand(null);
-    setSelectedVehicle(null);
-    loadState();
+    try {
+      const res = await adminFetch('/api/admin/pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, clearAll: true }),
+      });
+      const body = await responseBody(res);
+      if (!res.ok) {
+        setAdminError(body.error || 'Unable to discard vehicles.');
+        if (res.status === 401) {
+          setAuthed(false);
+          setState(null);
+        }
+        return;
+      }
+      setAdminError('');
+      setSelectedBrand(null);
+      setSelectedVehicle(null);
+      await loadState();
+    } catch {
+      setAdminError('Unable to reach the admin API.');
+    }
   }
 
   async function handleUnignore(adg) {
-    await fetch('/api/admin/pending', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ unignoreAdg: adg }),
-    });
-    loadState();
+    try {
+      const res = await adminFetch('/api/admin/pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unignoreAdg: adg }),
+      });
+      const body = await responseBody(res);
+      if (!res.ok) {
+        setAdminError(body.error || 'Unable to restore vehicle.');
+        if (res.status === 401) {
+          setAuthed(false);
+          setState(null);
+        }
+        return;
+      }
+      setAdminError('');
+      await loadState();
+    } catch {
+      setAdminError('Unable to reach the admin API.');
+    }
   }
+
+  async function handleLogout() {
+    let logoutError = '';
+    try {
+      const res = await adminFetch('/api/admin/logout', { method: 'POST' });
+      if (!res.ok && res.status !== 401) {
+        const body = await responseBody(res);
+        logoutError = body.error || 'Unable to log out from the admin API.';
+      }
+    } catch {
+      logoutError = 'Unable to reach the admin API while logging out.';
+    } finally {
+      setAuthed(false);
+      setState(null);
+      setSelectedBrand(null);
+      setSelectedVehicle(null);
+      setAdminError(logoutError);
+    }
+  }
+
+  if (loading && !state) return <div style={styles.page}>Loading...</div>;
 
   if (!authed) {
     return (
@@ -121,7 +242,7 @@ export default function AdminPage() {
             style={styles.input}
           />
           <button type="submit" style={styles.button}>Log in</button>
-          {loginError && <p style={styles.error}>{loginError}</p>}
+          {(loginError || adminError) && <p style={styles.error}>{loginError || adminError}</p>}
         </form>
       </div>
     );
@@ -136,7 +257,11 @@ export default function AdminPage() {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.h1}>Complete Care Admin</h1>
+      <div style={styles.headerRow}>
+        <h1 style={styles.h1}>Complete Care Admin</h1>
+        <button style={styles.logoutButton} onClick={handleLogout}>Log out</button>
+      </div>
+      {adminError && <p style={styles.error}>{adminError}</p>}
 
       <section style={styles.card}>
         <h2 style={styles.h2}>1. Upload weekly vehicle sheet</h2>
@@ -299,18 +424,23 @@ function VehicleEditor({ brand, vehicle, brandConfirmed, componentCategories, on
       body.exclusionMode = 'inherit';
     }
 
-    const res = await fetch('/api/admin/vehicle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const result = await res.json();
-    setSaving(false);
-    if (!res.ok) {
-      setError(result.error || 'Save failed.');
-      return;
+    try {
+      const res = await adminFetch('/api/admin/vehicle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await responseBody(res);
+      if (!res.ok) {
+        setError(result.error || 'Save failed.');
+        return;
+      }
+      onSaved();
+    } catch {
+      setError('Unable to reach the admin API.');
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -427,11 +557,13 @@ function VehicleEditor({ brand, vehicle, brandConfirmed, componentCategories, on
 const styles = {
   page: { fontFamily: 'system-ui, sans-serif', maxWidth: 900, margin: '0 auto', padding: 24, color: '#1a1a2e' },
   h1: { fontSize: 24, marginBottom: 16 },
+  headerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   h2: { fontSize: 18, marginBottom: 12 },
   card: { border: '1px solid #d9e4f0', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fff' },
   loginBox: { display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320, margin: '80px auto' },
   input: { padding: 10, border: '1px solid #ccc', borderRadius: 6, fontSize: 14 },
   button: { padding: '10px 16px', background: '#0a2e5c', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 },
+  logoutButton: { padding: '8px 12px', background: '#fff', color: '#0a2e5c', border: '1px solid #0a2e5c', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
   error: { color: '#d64045', fontSize: 13 },
   msg: { fontSize: 13, color: '#00a878', marginTop: 8 },
   brandGrid: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 },

@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getDraft } from '../../../../lib/schema';
-import { COMPONENT_CATEGORIES } from '../../../../lib/schema';
-import { checkSession } from '../login/route';
+import { authorizeRequest } from '../../../../lib/auth';
+import { errorResponse, authResponse } from '../../../../lib/http';
+import { COMPONENT_CATEGORIES, getDraft } from '../../../../lib/schema';
+
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function GET(req) {
-  if (!checkSession(req)) {
-    return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  try {
+    const authorization = authorizeRequest(req);
+    if (!authorization.ok) return authResponse(authorization);
+
+    const draft = await getDraft();
+    return NextResponse.json({ ...draft, componentCategories: COMPONENT_CATEGORIES });
+  } catch (error) {
+    return errorResponse(error);
   }
-  const draft = await getDraft();
-  return NextResponse.json({ ...draft, componentCategories: COMPONENT_CATEGORIES });
 }

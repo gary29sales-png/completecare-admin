@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { authorizeRequest } from '../../../../lib/auth';
-import { errorResponse, authResponse } from '../../../../lib/http';
-import { publishDraft } from '../../../../lib/schema';
+import { authorizeRequest, clearSessionCookies } from '../../../../lib/auth';
+import { authResponse, errorResponse } from '../../../../lib/http';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -11,8 +10,9 @@ export async function POST(req) {
     const authorization = authorizeRequest(req, { mutation: true });
     if (!authorization.ok) return authResponse(authorization);
 
-    const published = await publishDraft();
-    return NextResponse.json({ ok: true, published });
+    const response = NextResponse.json({ ok: true });
+    clearSessionCookies(response);
+    return response;
   } catch (error) {
     return errorResponse(error);
   }
