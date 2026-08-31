@@ -1,15 +1,24 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import { getDraft, setDraft } from '../../../../lib/schema';
-import { checkSession } from '../login/route';
+import { authorizeRequest } from '../../../../lib/auth';
+import { getBoundedInteger } from '../../../../lib/config';
+import { errorResponse, authResponse, getContentLength } from '../../../../lib/http';
+import { PayloadTooLargeError, ValidationError } from '../../../../lib/errors';
+import { MAX_PENDING_VEHICLES, getDraft, setDraft } from '../../../../lib/schema';
+import {
+  safeText,
+  validateAdg,
+  validateBrand,
+  validatePeriodValue,
+} from '../../../../lib/validation';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-// Column names as they actually appear in the weekly CompleteCare_Include
-// export (confirmed against a real file, 18 June 2026 sheet). A little
-// alias slack is kept per field in case the naming shifts slightly week
-// to week, but ADG_CODE / BRAND / DESC / RANGE / MODEL / WARRANTY /
-// WARR_KM / WARR_TIME are the exact real headers.
+const MAX_UPLOAD_ROWS = 50000;
+const MAX_UPLOAD_COLUMNS = 64;
+const MAX_MULTIPART_OVERHEAD = 1024 * 1024;
+
 const HEADER_ALIASES = {
   adg: ['adg_code', 'adg code', 'adg', 'adg no', 'adg number'],
   brand: ['brand', 'make'],
@@ -22,153 +31,246 @@ const HEADER_ALIASES = {
   warr_time: ['warr_time', 'warranty months', 'warr time', 'warranty period'],
 };
 
-// Words in the description that indicate a hybrid/PHEV drivetrain. The
-// sheet has no dedicated hybrid column (FUEL_TYPE is only ever UNLEADED
-// or DIESEL), so this is the best available signal — same approach the
-// existing dataset already uses loosely.
 const HYBRID_KEYWORDS = ['HEV', 'HYBRID', 'PHEV', 'DM-I', 'DHT'];
 
-function normalizeHeader(h) {
-  return String(h || '').trim().toLowerCase();
+function normalizeHeader(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function buildColumnMap(headerRow) {
-  const map = {};
   const normalized = headerRow.map(normalizeHeader);
+  const map = {};
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
-    const idx = normalized.findIndex((h) => aliases.includes(h));
-    if (idx !== -1) map[field] = idx;
+    const matches = normalized
+      .map((header, index) => (aliases.includes(header) ? index : -1))
+      .filter((index) => index !== -1);
+    if (matches.length > 1) {
+      throw new ValidationError(`The sheet contains more than one ${field} column.`);
+    }
+    if (matches.length === 1) map[field] = matches[0];
   }
   return map;
 }
 
+function cellText(row, index, field, maxLength = 1000) {
+  const value = row[index];
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+    throw new ValidationError(`${field} contains an unsupported cell value.`);
+  }
+  return safeText(String(value), field, { maxLength, allowEmpty: true });
+}
+
+function normalizeAdg(raw) {
+  if (raw === null || raw === undefined || raw === '') return '';
+  let value;
+  if (typeof raw === 'number') {
+    if (!Number.isSafeInteger(raw) || raw < 0) {
+      throw new ValidationError('ADG values must be whole numbers or strings.');
+    }
+    value = String(raw);
+  } else if (typeof raw === 'string') {
+    value = raw.trim();
+    if (/^\d+\.0+$/.test(value)) value = value.split('.')[0];
+  } else {
+    throw new ValidationError('ADG values must be whole numbers or strings.');
+  }
+
+  if (!value) return '';
+  if (/^\d+$/.test(value) && value.length < 8) value = value.padStart(8, '0');
+  return validateAdg(value);
+}
+
 function extractWarrantyKmTime(warrantyText) {
-  // Fallback parse only used if warr_km/warr_time columns aren't present —
-  // the real sheet has them as their own numeric columns, so this rarely runs.
   if (!warrantyText) return { warr_km: '', warr_time: '' };
-  const m = warrantyText.match(/(\d+)\s*YEAR\/(\d[\d,]*)\s*KM/i);
-  if (!m) return { warr_km: '', warr_time: '' };
+  const match = warrantyText.match(/(\d+)\s*YEAR\/(\d[\d,]*)\s*KM/i);
+  if (!match) return { warr_km: '', warr_time: '' };
   return {
-    warr_time: String(parseInt(m[1], 10) * 12),
-    warr_km: m[2].replace(/,/g, ''),
+    warr_time: String(parseInt(match[1], 10) * 12),
+    warr_km: match[2].replace(/,/g, ''),
   };
 }
 
-// ADG codes come through as plain numbers in Excel, so leading zeros
-// (e.g. BAIC's "05617150") are lost — they read back as 5617150. The
-// existing dataset predominantly uses 8-digit zero-padded codes, so pad
-// anything shorter back out to 8 digits. This is a best-effort fix, not
-// guaranteed for every brand's convention — a few ADGs in the existing
-// data (some BYD codes) are legitimately 7 digits, unpadded. Those will
-// get zero-padded here too; if that ever creates a mismatch on a repeat
-// upload, it'll show up as a "new" vehicle that's actually a duplicate,
-// and it's easy to spot in the pending queue by description.
-function normalizeAdg(raw) {
-  if (raw === null || raw === undefined || raw === '') return '';
-  let str;
-  if (typeof raw === 'number') {
-    str = String(Math.round(raw));
-  } else {
-    str = String(raw).trim();
-    // Excel sometimes hands back "5617150.0" as text too.
-    if (/^\d+\.0+$/.test(str)) str = str.split('.')[0];
-  }
-  if (/^\d+$/.test(str) && str.length < 8) {
-    str = str.padStart(8, '0');
-  }
-  return str;
+function detectHybrid(desc) {
+  const upper = desc.toUpperCase();
+  return HYBRID_KEYWORDS.some((keyword) => upper.includes(keyword)) ? 'YES' : 'NO';
 }
 
-function detectHybrid(desc) {
-  const upper = (desc || '').toUpperCase();
-  return HYBRID_KEYWORDS.some((kw) => upper.includes(kw)) ? 'YES' : 'NO';
+function getUploadMaxBytes() {
+  return getBoundedInteger('MAX_UPLOAD_BYTES', 10 * 1024 * 1024, 1024, 25 * 1024 * 1024);
+}
+
+function readUploadRows(fileBuffer) {
+  let workbook;
+  try {
+    workbook = XLSX.read(fileBuffer, { type: 'buffer', dense: true, cellFormula: false });
+  } catch {
+    throw new ValidationError('The uploaded file is not a readable Excel workbook.');
+  }
+
+  if (!Array.isArray(workbook.SheetNames) || workbook.SheetNames.length === 0) {
+    throw new ValidationError('The workbook does not contain a worksheet.');
+  }
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new ValidationError('The first worksheet could not be read.');
+
+  let rows;
+  try {
+    rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  } catch {
+    throw new ValidationError('The first worksheet could not be read.');
+  }
+  if (!Array.isArray(rows) || rows.length < 2) {
+    throw new ValidationError('Sheet appears to be empty.');
+  }
+  if (rows.length > MAX_UPLOAD_ROWS) {
+    throw new PayloadTooLargeError(`The sheet cannot contain more than ${MAX_UPLOAD_ROWS} rows.`);
+  }
+  if (!Array.isArray(rows[0]) || rows[0].length > MAX_UPLOAD_COLUMNS) {
+    throw new ValidationError(`The header row cannot contain more than ${MAX_UPLOAD_COLUMNS} columns.`);
+  }
+  return rows;
+}
+
+function makeVehicle(row, rowNumber, colMap) {
+  const adg = normalizeAdg(row[colMap.adg]);
+  if (!adg) throw new ValidationError(`Row ${rowNumber} is missing an ADG code.`);
+
+  const desc = colMap.desc === undefined ? '' : cellText(row, colMap.desc, `Row ${rowNumber} description`, 240);
+  const suppliedBrand = colMap.brand === undefined
+    ? ''
+    : cellText(row, colMap.brand, `Row ${rowNumber} brand`, 80);
+  if (!suppliedBrand && !desc) {
+    throw new ValidationError(`Row ${rowNumber} must include a brand or description.`);
+  }
+  const brand = validateBrand(suppliedBrand || (desc.split(/\s+/)[0] || 'UNKNOWN').toUpperCase());
+  const warranty = colMap.warranty === undefined
+    ? ''
+    : cellText(row, colMap.warranty, `Row ${rowNumber} warranty`, 1000);
+  const parsedWarranty = extractWarrantyKmTime(warranty);
+  const warrKm = colMap.warr_km === undefined
+    ? parsedWarranty.warr_km
+    : cellText(row, colMap.warr_km, `Row ${rowNumber} warranty km`, 32);
+  const warrTime = colMap.warr_time === undefined
+    ? parsedWarranty.warr_time
+    : cellText(row, colMap.warr_time, `Row ${rowNumber} warranty time`, 32);
+
+  return {
+    brand,
+    vehicle: {
+      adg,
+      cap: colMap.cap === undefined ? '' : cellText(row, colMap.cap, `Row ${rowNumber} capacity`, 32),
+      hybrid: detectHybrid(desc),
+      desc,
+      range: colMap.range === undefined ? '' : cellText(row, colMap.range, `Row ${rowNumber} range`, 160),
+      model: colMap.model === undefined ? '' : cellText(row, colMap.model, `Row ${rowNumber} model`, 160),
+      warranty,
+      warr_km: validatePeriodValue(warrKm, `Row ${rowNumber} warranty km`),
+      warr_time: validatePeriodValue(warrTime, `Row ${rowNumber} warranty time`),
+    },
+  };
 }
 
 export async function POST(req) {
-  if (!checkSession(req)) {
-    return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
-  }
+  try {
+    const authorization = authorizeRequest(req, { mutation: true });
+    if (!authorization.ok) return authResponse(authorization);
 
-  const form = await req.formData();
-  const file = form.get('file');
-  if (!file) {
-    return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
-  }
-
-  const buf = Buffer.from(await file.arrayBuffer());
-  const wb = XLSX.read(buf, { type: 'buffer' });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
-  if (rows.length < 2) {
-    return NextResponse.json({ error: 'Sheet appears to be empty.' }, { status: 400 });
-  }
-
-  const colMap = buildColumnMap(rows[0]);
-  if (colMap.adg === undefined) {
-    return NextResponse.json(
-      { error: 'Could not find an ADG column in the sheet. Check the header row.' },
-      { status: 400 }
-    );
-  }
-
-  const draft = await getDraft();
-  const existingAdgs = new Set();
-  for (const brand of Object.keys(draft.vehicles)) {
-    for (const v of draft.vehicles[brand]) {
-      if (v.adg) existingAdgs.add(normalizeAdg(v.adg));
+    const maxUploadBytes = getUploadMaxBytes();
+    const contentLength = getContentLength(req);
+    if (contentLength !== null && contentLength > maxUploadBytes + MAX_MULTIPART_OVERHEAD) {
+      throw new PayloadTooLargeError(`Upload exceeds the ${maxUploadBytes} byte limit.`);
     }
-  }
-  // Also exclude ADGs already sitting in the pending queue awaiting
-  // categorization — otherwise re-uploading the same weekly sheet (or
-  // uploading before last week's pending items are cleared) duplicates them.
-  for (const brand of Object.keys(draft.pending || {})) {
-    for (const v of draft.pending[brand]) {
-      if (v.adg) existingAdgs.add(normalizeAdg(v.adg));
+
+    let form;
+    try {
+      form = await req.formData();
+    } catch {
+      throw new ValidationError('Invalid multipart upload.');
     }
+    const formKeys = Array.from(form.keys());
+    const files = form.getAll('file');
+    if (formKeys.some((key) => key !== 'file') || files.length !== 1) {
+      throw new ValidationError('A single Excel file is required.');
+    }
+    const file = files[0];
+    if (!file || typeof file.arrayBuffer !== 'function' || typeof file.name !== 'string') {
+      throw new ValidationError('A single Excel file is required.');
+    }
+    const fileName = safeText(file.name, 'file name', { maxLength: 255 });
+    if (!/\.(xlsx|xls)$/i.test(fileName)) {
+      throw new ValidationError('Only .xlsx and .xls files are supported.');
+    }
+    if (!Number.isSafeInteger(file.size) || file.size <= 0) {
+      throw new ValidationError('The uploaded file is empty or invalid.');
+    }
+    if (file.size > maxUploadBytes) {
+      throw new PayloadTooLargeError(`Upload exceeds the ${maxUploadBytes} byte limit.`);
+    }
+
+    let fileBuffer;
+    try {
+      fileBuffer = Buffer.from(await file.arrayBuffer());
+    } catch {
+      throw new ValidationError('The uploaded file could not be read.');
+    }
+    if (fileBuffer.length === 0) throw new ValidationError('The uploaded file is empty.');
+    if (fileBuffer.length > maxUploadBytes) {
+      throw new PayloadTooLargeError(`Upload exceeds the ${maxUploadBytes} byte limit.`);
+    }
+
+    const rows = readUploadRows(fileBuffer);
+    const colMap = buildColumnMap(rows[0]);
+    if (colMap.adg === undefined) {
+      throw new ValidationError('Could not find an ADG column in the sheet. Check the header row.');
+    }
+    if (colMap.brand === undefined && colMap.desc === undefined) {
+      throw new ValidationError('The sheet must include a brand or description column.');
+    }
+
+    const draft = await getDraft();
+    const existingAdgs = new Set();
+    for (const vehicles of Object.values(draft.vehicles)) {
+      for (const vehicle of vehicles) {
+        if (vehicle.adg) existingAdgs.add(String(vehicle.adg));
+      }
+    }
+    for (const vehicles of Object.values(draft.pending)) {
+      for (const vehicle of vehicles) {
+        if (vehicle.adg) existingAdgs.add(String(vehicle.adg));
+      }
+    }
+    for (const adg of draft.ignored_adgs) existingAdgs.add(String(adg));
+
+    const newlyFound = [];
+    const pendingCount = Object.values(draft.pending)
+      .reduce((count, vehicles) => count + vehicles.length, 0);
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      if (!Array.isArray(row) || row.length > MAX_UPLOAD_COLUMNS) {
+        throw new ValidationError(`Row ${rowIndex + 1} has too many columns.`);
+      }
+      if (row.every((value) => value === '' || value === null || value === undefined)) continue;
+
+      const { brand, vehicle } = makeVehicle(row, rowIndex + 1, colMap);
+      if (existingAdgs.has(vehicle.adg)) continue;
+      if (pendingCount + newlyFound.length >= MAX_PENDING_VEHICLES) {
+        throw new PayloadTooLargeError(`The pending queue cannot exceed ${MAX_PENDING_VEHICLES} vehicles.`);
+      }
+
+      if (!draft.pending[brand]) draft.pending[brand] = [];
+      draft.pending[brand].push(vehicle);
+      existingAdgs.add(vehicle.adg);
+      newlyFound.push({ brand, ...vehicle });
+    }
+
+    await setDraft(draft);
+    return NextResponse.json({
+      ok: true,
+      newCount: newlyFound.length,
+      newVehicles: newlyFound,
+    });
+  } catch (error) {
+    return errorResponse(error);
   }
-  // Also exclude ADGs the admin deliberately discarded — they should
-  // never resurface just because they're still in the weekly sheet.
-  for (const adg of draft.ignored_adgs || []) {
-    existingAdgs.add(normalizeAdg(adg));
-  }
-
-  const newlyFound = [];
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r];
-    const adg = colMap.adg !== undefined ? normalizeAdg(row[colMap.adg]) : '';
-    if (!adg || existingAdgs.has(adg)) continue;
-
-    const desc = colMap.desc !== undefined ? String(row[colMap.desc] || '').trim() : '';
-    const brand =
-      (colMap.brand !== undefined && String(row[colMap.brand] || '').trim()) ||
-      (desc.split(' ')[0] || 'UNKNOWN').toUpperCase();
-    const warranty = colMap.warranty !== undefined ? String(row[colMap.warranty] || '').trim() : '';
-    const parsedWarranty = extractWarrantyKmTime(warranty);
-
-    const vehicle = {
-      adg,
-      cap: colMap.cap !== undefined ? String(row[colMap.cap] || '').trim() : '',
-      hybrid: detectHybrid(desc),
-      desc,
-      range: colMap.range !== undefined ? String(row[colMap.range] || '').trim() : '',
-      model: colMap.model !== undefined ? String(row[colMap.model] || '').trim() : '',
-      warranty,
-      warr_km: colMap.warr_km !== undefined ? String(row[colMap.warr_km] || '').trim() : parsedWarranty.warr_km,
-      warr_time: colMap.warr_time !== undefined ? String(row[colMap.warr_time] || '').trim() : parsedWarranty.warr_time,
-    };
-
-    if (!draft.pending[brand]) draft.pending[brand] = [];
-    draft.pending[brand].push(vehicle);
-    existingAdgs.add(adg); // avoid double-adding duplicate rows within the same sheet
-    newlyFound.push({ brand, ...vehicle });
-  }
-
-  await setDraft(draft);
-
-  return NextResponse.json({
-    ok: true,
-    newCount: newlyFound.length,
-    newVehicles: newlyFound,
-  });
 }

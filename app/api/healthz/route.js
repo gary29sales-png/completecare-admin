@@ -1,0 +1,5 @@
+import { GET as healthGet } from '../../healthz/route';
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const GET = healthGet;

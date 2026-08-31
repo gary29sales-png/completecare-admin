@@ -1259,6 +1259,17 @@
       "warranty": "7 YEAR/200000KM WARRANTY, 10 YEAR/1 MILLION KM ENGINE WARRANTY, 7 YEAR/90000KM SERVICE PLAN, 10 YEAR/UNLIMITED KM BATTERY WARRANTY",
       "warr_km": "200000",
       "warr_time": "84"
+    },
+    {
+      "adg": "10328190",
+      "cap": "1598",
+      "hybrid": "NO",
+      "desc": "CHERY TIGGO 8 PRO MY26.6 1.6T LS DCT",
+      "range": "TIGGO 8 PRO MY26.6",
+      "model": "1.6T LS DCT",
+      "warranty": "5 YEAR/150000KM WARRANTY, 5 YEAR/60000KM SERVICE PLAN",
+      "warr_km": "150000",
+      "warr_time": "60"
     }
   ],
   "OMODA": [
@@ -3000,6 +3011,50 @@
       "warranty": "7 YEAR/200000KM WARRANTY, 10 YEAR/1 MILLION KM POWERTRAIN WARRANTY FOR 1ST OWNER, 7 YEAR/75000KM SERVICE PLAN",
       "warr_km": "200000",
       "warr_time": "84"
+    },
+    {
+      "adg": "30212125",
+      "cap": "1498",
+      "hybrid": "NO",
+      "desc": "JETOUR DASHING MY24 1.5T PRESTIGE",
+      "range": "DASHING MY24",
+      "model": "1.5T PRESTIGE",
+      "warranty": "5 YEAR/150000KM WARRANTY, 10 YEAR/1000000KM ENGINE WARRANTY, 5 YEAR/60000KM SERVICE PLAN",
+      "warr_km": "150000",
+      "warr_time": "60"
+    },
+    {
+      "adg": "30212135",
+      "cap": "1498",
+      "hybrid": "NO",
+      "desc": "JETOUR DASHING MY24 1.5T PRIME",
+      "range": "DASHING MY24",
+      "model": "1.5T PRIME",
+      "warranty": "5 YEAR/150000KM WARRANTY, 10 YEAR/1000000KM ENGINE WARRANTY, 5 YEAR/60000KM SERVICE PLAN",
+      "warr_km": "150000",
+      "warr_time": "60"
+    },
+    {
+      "adg": "30215125",
+      "cap": "1498",
+      "hybrid": "NO",
+      "desc": "JETOUR X70 PLUS MY24 1.5T PRESTIGE",
+      "range": "X70 PLUS MY24",
+      "model": "1.5T PRESTIGE",
+      "warranty": "5 YEAR/150000KM WARRANTY, 10 YEAR/1000000KM ENGINE WARRANTY, 5 YEAR/60000KM SERVICE PLAN",
+      "warr_km": "150000",
+      "warr_time": "60"
+    },
+    {
+      "adg": "30215135",
+      "cap": "1498",
+      "hybrid": "NO",
+      "desc": "JETOUR X70 PLUS MY24 1.5T PRIME",
+      "range": "X70 PLUS MY24",
+      "model": "1.5T PRIME",
+      "warranty": "5 YEAR/150000KM WARRANTY, 10 YEAR/1000000KM ENGINE WARRANTY, 5 YEAR/60000KM SERVICE PLAN",
+      "warr_km": "150000",
+      "warr_time": "60"
     }
   ],
   "LEPAS": [
